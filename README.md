@@ -1,6 +1,6 @@
 # Node driver to [Tarantool](http://tarantool.org) 1.5
 
-An unofficial 1.6 driver is here: https://github.com/KlonD90/node-tarantool-driver
+An unofficial *1.6* driver is here: https://github.com/KlonD90/node-tarantool-driver
 
 Connector implements [Tarantool 1.5 protocol](https://github.com/tarantool/tarantool/blob/stable/doc/box-protocol.txt) and exposes nice interface to access Tarantool.
 
