@@ -1,6 +1,8 @@
-# Connector - high-level [Tarantool](http://tarantool.org) driver
+# Node driver to [Tarantool](http://tarantool.org) 1.5
 
-Connector implements [Tarantool binary protocol](https://github.com/mailru/tarantool/blob/master/doc/box-protocol.txt) and exposes nice interface to access Tarantool.
+An unofficial 1.6 driver is here: https://github.com/KlonD90/node-tarantool-driver
+
+Connector implements [Tarantool 1.5 protocol](https://github.com/tarantool/tarantool/blob/stable/doc/box-protocol.txt) and exposes nice interface to access Tarantool.
 
 Connector uses [Transport](https://github.com/devgru/node-tarantool-transport) to compose and parse request and response headers.
 
