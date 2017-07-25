@@ -1,178 +1,198 @@
-# Node driver to [Tarantool](http://tarantool.org) 1.5
+# node-tarantool-driver
 
-An unofficial *1.6* driver is here: https://github.com/KlonD90/node-tarantool-driver
+[![Build Status](https://travis-ci.org/KlonD90/node-tarantool-driver.svg)](https://travis-ci.org/KlonD90/node-tarantool-driver)
 
-Connector implements [Tarantool 1.5 protocol](https://github.com/tarantool/tarantool/blob/stable/doc/box-protocol.txt) and exposes nice interface to access Tarantool.
+Node tarantool driver for 1.6 support Node.js v.0.12+ and IO.js.
 
-Connector uses [Transport](https://github.com/devgru/node-tarantool-transport) to compose and parse request and response headers.
+Based on https://github.com/mialinx/go-tarantool-1.6 and implements http://tarantool.org/doc/dev_guide/box-protocol.html, for more information you can read them or basic documentation at http://tarantool.org/doc/.
 
-## NPM
+For work with tarantool tuple i use msgpack-lite and array default transformation with this package.
 
-```shell
-npm install tarantool
+If you have a problem with connection it will be destroyed. You can subscribe on TarantoolConnection.socket.on('close') for retrieve information about closing connection or you can process rejected errors for you requests.
+
+## Install
+
+```
+npm install --save tarantool-driver
 ```
 
-## Notes on Tarantool Connector
+## Usage example
 
-Connector hides protocol-related stuff under the hood but there are things to know about before using it.
-
-Tarantool database consists of Spaces (tables) and Tuples (rows). Spaces have no name, only numeric id.
-
-This module provides three interfaces — Connection, Mapping and Space.
-
-Connection contains methods to send all kinds of requests, but arguments (and results) are binary Tuples — not usable.
-
-Mapping knows how to convert Object to Tuple and vice versa (thanks to `spec`) and Space is a Mapping with specified space id.
-
-Call `ping` on Connector, `call` on Mapping and `insert`, `select`, `update`, `delete` on Space.
-
-## Object-to-Tuple binding specification — `spec`
-
-There are three inner types in Tarantool storage: `int32`, `int64` and `buffer` (octet string). **All integers (options, flags, fields, space ids) are unsigned.**
-
-Connector can encode some pseudo-types:
-- `int32`: Unsigned 32-bit integer.
-- `int53`: Stored as internal `int64`. A native unsigned JS Number limited to 53 bit, stored natively without lost of significance.
-- `int64`: Accepts and returns `BigNum` objects from [`bignum`](https://github.com/justmoon/node-bignum).
-- `buffer`: Raw binary buffer.
-- `string`: Stored as `buffer` UTF-8 string.
-- `object`: Stored as `buffer` UTF-8 string with JSON content.
-
-In order to use custom type, instead of providing it's name, pass object having `pack: (value) -> buffer` and `unpack: (buffer) -> value` methods as in example below.
-
-Build `spec` object to map Object and Tuples to each other. Tarantool knows nothing about field names or types and Mapping maps them depending on `spec`.
-
-Example of valid `spec`:
-```coffee
-spec = id: 'int32', name: 'string', flags: 'object', smth_hard: {pack: ((value) -> ...), unpack: ((buffer) -> ...)}
+We use TarantoolConnection instance and connect before other operations. Methods call return promise(https://developer.mozilla.org/ru/docs/Web/JavaScript/Reference/Global_Objects/Promise). Available methods with some testing: select, update, replace, insert, delete, auth, destroy.
+```
+var TarantoolConnection = require('tarantool-driver');
+var conn = new TarantoolConnection({port: 3301});
+conn.connect()
+.then(function(){
+  //auth for login, password
+  return conn.auth('test', 'test');
+}).then(function(){
+  // select arguments space_id, index_id, limit, offset, iterator, key
+  return conn.select(512, 0, 1, 0, 'eq', [50]);
+})
+.then(funtion(results){
+  doSomeThingWithResults(results);
+});
 ```
 
-We specify three field-related things: order, name and type. `spec` tells Mapping which place should every field take and how to convert it.
 
-*Use any string containing '32' to specity int32 type, same for 53 and 64*
+## Msgpack implentation
+
+You can use any implementation that can be duck typing with next interface:
+
+```
+
+//msgpack implementation example
+/*
+    @interface
+    decode: (Buffer buf)
+    encode: (Object obj)
+ */
+var exampleCustomMsgpack = {
+    encode: function(obj){
+        return yourmsgpack.encode(obj);
+    },
+    decode: function(buf){
+        return yourmsgpack.decode(obj);
+    }
+};
+```
+
+By default use msgpack-lite package.
 
 ## API
 
-### Connection
+**class TarantoolConnection(options)**
+```
+var defaultOptions = {
+    host: 'localhost',
+    port: '3301',
+    log: false,
+	  msgpack: require('msgpack-lite'),
+    timeout: 3000
+};
+```
+You can overrid default options with options.
 
-`tc` stands for Tarantool Connection
+**connect() : Promise**
 
-```coffee
-# create Connection using default Transport
-# default port is 33013
-tc = Tarantool.connect port, host, callback
-# OR create Connection using Transport, any object, with `request(type, body, callback)`
-# tc = new Tarantool transport
+Resolve if connected. Or reject if not.
 
-# make use of connection
-tc.insert space, tuple, [flags,] callback
-tc.select space, tuples, [index, [offset, [limit,]]] callback
-tc.update space, tuple, [operations, [flags,]] callback
-tc.delete space, tuple, [flags,] callback
-tc.call proc, tuple, [flags,] callback
-tc.ping callback
+**auth(login: String, password: String) : Promise**
+
+Auth with using chap-sha1(http://tarantool.org/doc/book/box/box_space.html). About authenthication more here: http://tarantool.org/doc/book/box/authentication.html
+
+**select(spaceId: Number or String, indexId: Number or String, limit: Number, offset: Number, iterator: Iterator,  key: tuple) : Promise( Array of tuples)**
+
+Iterators: http://tarantool.org/doc/book/box/box_index.html. Available iterators: 'eq', 'req', 'all', 'lt', 'le', 'ge', 'gt', 'bitsAllSet', 'bitsAnySet', 'bitsAllNotSet'.
+
+It's just select. Promise resolve array of tuples.
+
+Some examples: 
 
 ```
-
-- `space`, `flags`, `offset` and `limit` are Integers
-- `space` is Space number
-- `flags` is optional field, [possible values](https://github.com/mailru/tarantool/blob/master/doc/box-protocol.txt#L231) are stored in `Tarantool.flags` in camelCase, e.g. Tarantool.flags.returnTuple
-- `offset` and `limit` are optional, use them to specify ammount of returned with select
-- `tuples` is an Array of tuples
-- `tuple` is an Array of Fields, each Field is Buffer
-- `proc` is a String
-- `operations` is an Array of `operation`, they are constructed via Mapping or Space methods (see below)
-- `callback` is a Function that is called as `callback (returnCode, body)` where `body` is an Array of `tuples` or a Number or an error string if `returnCode` is non-zero.
-
-### Mapping
-
-Use Mapping to access several spaces with similar structure.
-
-Mapping API:
-```coffee
-# creating mapping with specified spec
-mapping = tc.mapping spec
-
-# forgetting about tuples
-mapping.insert space, object, [flags,] callback
-mapping.select space, objects, [index, [offset, [limit,]]] callback
-mapping.update space, object, [operations, [flags,]] callback
-mapping.delete space, object, [flags,] callback
-mapping.call proc, object, [flags,] callback
+conn.select(512, 0, 1, 0, 'eq', [50]);
+//same as
+conn.select('test', 'primary', 1, 0, 'eq', [50]);
 ```
 
-`callback` will be called as `callback (returnCode, body)` where `body` is an Array of *Objects* or a Number or an error string if `returnCode` is non-zero.
+You can use space name or index name instead if id but it will some requests for get this metadata. That information actual for delete, replace, insert, update too.
 
-```coffee
-# creating operations list — see below
-mapping.assign argument
-mapping.add argument
-mapping.and argument
-mapping.xor argument
-mapping.or argument
-mapping.delete argument
-mapping.insertBefore argument
-mapping.splice spliceArgument
+**delete(spaceId: Number or String, indexId: Number or String, key: tuple) : Promise(Array of tuples)**
+
+Promise resolve an array of deleted tuples.
+
+**update(spaceId: Number or String, indexId: Number or String, key: tuple, ops) : Promise(Array of tuples)**
+
+Ops: http://tarantool.org/doc/book/box/box_space.html (search for update here).
+
+Promise resolve an array of updated tuples.
+
+**insert(spaceId: Number or String, tuple: tuple) : Promise(Tuple)**
+
+So it's insert. More you can read here: http://tarantool.org/doc/book/box/box_space.html
+
+Promise resolve a new tuple.
+
+**upsert(spaceId: Number or String, ops: array of operations, tuple: tuple) : Promise()**
+
+About operation: http://tarantool.org/doc/book/box/box_space.html#lua-function.space_object.upsert
+
+Ops: http://tarantool.org/doc/book/box/box_space.html (search for update here).
+
+Promise resolve nothing.   
+
+**replace(spaceId: Number or String, tuple: tuple) : Promise(Tuple)**
+
+So it's replace. More you can read here: http://tarantool.org/doc/book/box/box_space.html
+
+Promise resolve a new or replaced tuple.
+
+**call(functionName: String, args...) : Promise(Array or undefined)**
+
+Call function with arguments. You can find example at test.
+
+You can create function on tarantool side: 
+```
+function myget(id)
+    val = box.space.batched:select{id}
+    return val[1]
+end
 ```
 
-`spliceArgument` is a Hash (Object) with three keys: `string` (String), `offset` (Number) and `length` (Number).
-
-`argument` is a Hash (Object) with single key.
-
-
-### Space
-
-Space incapsulates Mapping and space number to give you shortest API:
-
-```coffee
-# creating Space with spec
-space = tc.space space, spec
-# OR with mapping
-# mapping = tc.mapping spec
-# space = tc.space space, mapping
-
-space.insert object, [flags,] callback
-space.select objects, [index, [offset, [limit,]]], callback
-space.update object, [operations, [flags,]] callback
-space.delete object, [flags,] callback
-
-# creating operations list
-space.assign argument
-space.add argument
-space.and argument
-space.xor argument
-space.or argument
-space.delete argument
-space.insertBefore argument
-space.splice spliceArgument
+And then use something like this:
+```
+conn.call('myget', 4)
+.then(function(value){
+    console.log(value);
+});
 ```
 
-### Operations
+If you have a 2 arguments function just send a second arguments in this way:
+```
+conn.call('my2argumentsfunc', 'first', 'second arguments')
+```
+And etc like this.
 
-Tarantool's update deals with "operations" — atomic field actions.
+Because lua support a multiple return it's always return array or undefined.
 
-Here's an example:
+**destroy(interupt: Boolean) : Promise**
 
-```coffee
-spec = id: 'i32', name: 'string', winner: 'i32'
-userSpace = tc.space 2, spec
-operations = [
-    userSpace.or winner: 1
-    userSpace.splice name: offset: 0, length: 0, string: '[Winner] '
-]
-userSpace.update { id: userId }, operations, ->
-    console.log 'winner now has [Winner] tag before his name'
+If you call destroy with interupt true it will interupt all process and destroy socket connection without awaiting results. Else it's stub methods with promise reject for future call and await all results and then destroy connection.
+
+## Testing
+
+Now it's poor test just a win to win situation and some hacks before. Install all packages and tarantool on your machine then launch a test through:
+```
+$ ./test/box.lua
 ```
 
-## TODO
-- check if Buffer.concat is fast enough, if it is slow - replace with array of buffers, concat only before transport.request
-- check argument type in operations
-- catch socket errors and reconnect
-- write about Tarantool keys and multi-object select
-- write tests
+Then just a use **npm test** and it will use mocha and launch test.
 
-## Bugs and issues
-Bug reports and pull requests are welcome.
+## Contributions
 
-### LICENSE
-Tarantool Connector for node.js is published under MIT license.
+It's ok you can do whatever you need. I add log options for some technical information it can be help for you. If i don't answer i just miss email :( it's a lot emails from github so please write me to newbiecraft@gmail.com directly if i don't answer in one day.
+
+## Changelog
+
+### 1.0.0
+
+Fix test for call changes and remove unuse upsert parameter (critical change API for upsert)
+
+### 0.4.1
+
+Add clear schema cache on change schema id
+
+### 0.4.0
+
+Change msgpack5 to msgpack-lite(thx to @arusakov).  
+Add msgpack as option for connection.   
+Bump msgpack5 for work at new version.
+
+### 0.3.0
+Add upsert operation.  
+Key is now can be just a number.
+
+## ToDo
+
+Test **eval** methods and make benchmarks and improve performance.
