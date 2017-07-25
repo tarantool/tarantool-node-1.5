@@ -1,30 +1,37 @@
 {
-  "name": "tarantool",
-  "version": "0.2.9",
-  "description": "High-level Tarantool driver for node.js",
-  "files": ["lib"],
-  "main": "./lib",
+  "name": "tarantool-driver",
+  "version": "1.1.2",
+  "description": "Tarantool driver for 1.6",
+  "main": "index.js",
   "scripts": {
-    "prepublish": "coffee --bare --compile --output lib src/*.coffee",
-    "postpublish": "rm -rf lib",
-    "test": "./node_modules/.bin/nodeunit test"
+    "lint": "eslint ./lib ./test",
+    "test": "mocha -t 5000"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/devgru/node-tarantool.git"
-  },
-  "dependencies": {
-    "tarantool-transport": "0.2.x",
-    "bignum": "*",
-    "int53": "*"
-  },
-  "devDependencies": {
-    "coffee-script": "*",
-    "nodeunit": "*"
+    "url": "https://github.com/KlonD90/node-tarantool-driver.git"
   },
   "keywords": [
-    "tarantool"
+    "tarantool",
+    "driver",
+    "db",
+    "msgpack"
   ],
-  "author": "Devgru <git@devg.ru> (http://devg.ru)",
-  "license": "MIT"
+  "author": "KlonD90",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/KlonD90/node-tarantool-driver/issues"
+  },
+  "homepage": "https://github.com/KlonD90/node-tarantool-driver",
+  "dependencies": {
+    "bitwise-xor": "0.0.0",
+    "msgpack-lite": "^0.1.15",
+    "msgpack5": "^3.3.0",
+    "underscore": "^1.8.3"
+  },
+  "devDependencies": {
+    "benchmark": "^2.1.0",
+    "eslint": "^2.5.3",
+    "mocha": "^2.2.4"
+  }
 }
